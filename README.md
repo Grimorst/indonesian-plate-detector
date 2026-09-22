@@ -536,7 +536,7 @@ If this repository is later intended for public redistribution or commercial use
 
 ## Author
 
-**Alfian Nugroho Jati**
+**Grimors**
 
 Indonesian License Plate Recognition project using YOLO26, PaddleOCR, OpenCV, and Flask.
 
