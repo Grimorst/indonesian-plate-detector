@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deteksi Plat Kendaraan</title>
+  <meta name="description" content="Aplikasi deteksi plat kendaraan dari foto atau kamera live dengan YOLO best.pt dan OCR." />
+
+  <!-- Google Fonts: Orbitron & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body class="theme-dark">
+  <!-- Subtle dashboard background -->
+  <div class="cyber-grid-bg"></div>
+  <div class="scanlines"></div>
+
+  <!-- App Wrapper -->
+  <div class="app-container">
+    
+    <!-- Top Header -->
+    <header class="top-header">
+      <div class="header-brand">
+        <div class="brand-icon pulse-glow">
+          <i class="fa-solid fa-car-side"></i>
+        </div>
+        <div class="brand-text">
+          <h1>Deteksi Plat Kendaraan <span class="badge-alpr">ALPR</span></h1>
+          <p class="subtitle">Unggah foto atau gunakan kamera untuk membaca nomor plat secara otomatis.</p>
+        </div>
+      </div>
+
+      <!-- Mode Switcher (State: Foto vs CCTV) -->
+      <div class="mode-switch-container">
+        <div class="mode-switch-label">Pilih cara deteksi</div>
+        <div class="mode-switch-group">
+          <button id="btnModeFoto" class="mode-btn active" data-mode="foto">
+            <i class="fa-solid fa-image"></i>
+            <span>Foto</span>
+          </button>
+          <button id="btnModeCctv" class="mode-btn" data-mode="cctv">
+            <i class="fa-solid fa-video"></i>
+            <span>Kamera Live</span>
+            <span class="live-dot"></span>
+          </button>
+        </div>
+
+        <!-- Quick Camera Button in Header -->
+        <button id="btnQuickCamera" class="btn btn-emerald btn-sm pulse-cam" title="Hidupkan Kamera Langsung">
+          <i class="fa-solid fa-video"></i>
+          <span>Buka Kamera</span>
+        </button>
+      </div>
+
+      <!-- System Status Indicators -->
+      <div class="header-status">
+        <div class="status-item">
+          <span class="status-label">Status</span>
+          <span id="systemStatus" class="status-val text-emerald"><i class="fa-solid fa-circle-check"></i> Siap</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Waktu proses</span>
+          <span id="inferenceSpeed" class="status-val text-cyan">-- ms</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Suara</span>
+          <button id="btnToggleAudio" class="audio-toggle-btn active" title="Aktif/nonaktifkan suara notifikasi" aria-label="Aktif/nonaktifkan suara notifikasi">
+            <i class="fa-solid fa-volume-high"></i>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace Grid -->
+    <main class="main-content">
+      
+      <!-- LEFT / CENTER: Stream & Viewport -->
+      <section class="viewport-section glass-panel">
+        
+        <!-- Viewport Toolbar -->
+        <div class="panel-header">
+          <div class="panel-title">
+            <i id="modeIcon" class="fa-solid fa-image text-cyan"></i>
+            <span id="viewportTitle">Deteksi dari Foto</span>
+          </div>
+
+          <!-- Controls for Foto Mode -->
+          <div id="fotoControls" class="panel-actions">
+            <button id="btnOpenSnapCam" class="btn btn-emerald btn-sm">
+              <i class="fa-solid fa-camera"></i> Kamera
+            </button>
+            <button id="btnLoadSample" class="btn btn-secondary btn-sm">
+              <i class="fa-solid fa-car-side"></i> Coba Contoh
+            </button>
+            <label for="imageFileInput" class="btn btn-primary btn-sm upload-label">
+              <i class="fa-solid fa-cloud-arrow-up"></i> Unggah Foto
+            </label>
+            <input type="file" id="imageFileInput" accept="image/*" style="display:none" />
+          </div>
+
+          <!-- Controls for CCTV Mode -->
+          <div id="cctvControls" class="panel-actions d-none">
+            <select id="cameraSourceSelect" class="camera-select" title="Pilih Perangkat Kamera">
+              <option value="">Kamera otomatis</option>
+            </select>
+            <button id="btnToggleCam" class="btn btn-emerald btn-sm">
+              <i class="fa-solid fa-power-off"></i> <span id="camBtnText">Mulai Kamera</span>
+            </button>
+            <button id="btnSnapPlate" class="btn btn-cyan btn-sm" disabled title="Tangkap & Perbesar Plat">
+              <i class="fa-solid fa-camera-retro"></i> Snapshot
+            </button>
+            <button id="btnSimulateStream" class="btn btn-secondary btn-sm" title="Simulasi Traffic CCTV">
+              <i class="fa-solid fa-circle-play"></i> Demo Live
+            </button>
+          </div>
+        </div>
+
+        <!-- Main Display Screen -->
+        <div class="screen-wrapper" id="dropZone">
+          
+          <!-- SCANNER LASER ANIMATION -->
+          <div id="scannerLine" class="scanner-line d-none"></div>
+
+          <!-- STATE 1: FOTO MODE VIEW -->
+          <div id="fotoContainer" class="view-container">
+            <div id="emptyUploadState" class="empty-state">
+              <div class="empty-icon-wrap">
+                <i class="fa-solid fa-cloud-arrow-up"></i>
+              </div>
+              <h3>Mulai dari foto kendaraan</h3>
+              <p>Tarik foto ke area ini, pilih file, ambil dari kamera, atau coba contoh bawaan.</p>
+              <div class="empty-actions">
+                <button id="btnOpenSnapCamCenter" class="btn btn-emerald">
+                  <i class="fa-solid fa-camera"></i> Ambil dari Kamera
+                </button>
+                <label for="imageFileInput" class="btn btn-primary">
+                  <i class="fa-solid fa-folder-open"></i> Pilih Foto
+                </label>
+                <button id="btnLoadSample2" class="btn btn-outline">
+                  <i class="fa-solid fa-bolt"></i> Coba Contoh
+                </button>
+              </div>
+            </div>
+
+            <!-- Image Canvas View (Visible after upload) -->
+            <div id="imageDisplayWrapper" class="display-wrapper d-none">
+              <canvas id="photoCanvas"></canvas>
+              <div class="canvas-watermark">Hasil deteksi plat</div>
+            </div>
+          </div>
+
+          <!-- STATE 2: CCTV MODE VIEW -->
+          <div id="cctvContainer" class="view-container d-none">
+            <div id="cctvOffState" class="empty-state">
+              <div class="empty-icon-wrap cctv-pulse">
+                <i class="fa-solid fa-video-slash"></i>
+              </div>
+              <h3>Kamera belum aktif</h3>
+              <p>Aktifkan webcam laptop/PC atau jalankan demo live untuk melihat alur deteksi.</p>
+              <div class="empty-actions">
+                <button id="btnStartCamCenter" class="btn btn-emerald">
+                  <i class="fa-solid fa-video"></i> Mulai Kamera
+                </button>
+                <button id="btnSimulateStreamCenter" class="btn btn-outline">
+                  <i class="fa-solid fa-traffic-light"></i> Jalankan Demo Live
+                </button>
+              </div>
+            </div>
+
+            <!-- Active Video / CCTV View -->
+            <div id="cctvDisplayWrapper" class="display-wrapper d-none">
+              <video id="webcamVideo" autoplay playsinline muted></video>
+              <canvas id="cctvOverlayCanvas"></canvas>
+              <div class="cctv-hud">
+                <div class="hud-top-left">
+                  <span class="hud-rec-dot"></span> LIVE [KAMERA]
+                </div>
+                <div class="hud-top-right">
+                  <span id="hudTimestamp">2026-09-14 21:50:00</span>
+                </div>
+                <div class="hud-bottom-left">
+                  <span>RES: <span id="streamRes">HD 1280x720</span></span> &bull; <span>FPS: <span id="streamFps">30</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Loading Spinner Overlay -->
+          <div id="loadingOverlay" class="loading-overlay d-none">
+            <div class="cyber-spinner"></div>
+            <div class="loading-text" id="loadingText">Sedang menganalisis plat...</div>
+          </div>
+        </div>
+
+        <!-- Quick Info Footer Bar -->
+        <div class="viewport-footer">
+          <div class="footer-tip">
+            <i class="fa-solid fa-circle-info text-cyan"></i>
+            <span id="footerTipText">Mode Foto: unggah foto mobil atau motor untuk mendeteksi nomor plat secara otomatis.</span>
+          </div>
+          <div class="detection-meta" id="detectionMeta">
+            <span class="meta-tag"><i class="fa-solid fa-cube"></i> Model: Grimorsbest.pt</span>
+            <span class="meta-tag"><i class="fa-solid fa-font"></i> OCR: PaddleOCR Robust</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT: Detection Results & Plate Inspector -->
+      <aside class="sidebar-section">
+        
+        <!-- Plate Detail Card -->
+        <div class="glass-panel result-card">
+          <div class="panel-header">
+            <div class="panel-title">
+              <i class="fa-solid fa-id-card text-cyan"></i>
+              <span>Hasil Utama</span>
+            </div>
+            <span id="plateCountBadge" class="badge-pill">0 PLAT</span>
+          </div>
+
+          <!-- Active Primary Plate Readout -->
+          <div class="plate-inspector-content">
+            
+            <!-- Real Physical License Plate Badge Mockup -->
+            <div class="plate-box-container">
+              <div class="plate-badge" id="plateBadgeMockup">
+                <div class="plate-badge-inner">
+                  <span class="plate-country-strip"><i class="fa-solid fa-shield-halved"></i> ID</span>
+                  <div class="plate-number" id="primaryPlateNumber">BELUM ADA DETEKSI</div>
+                  <span class="plate-period" id="primaryPlatePeriod">--.--</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Stats & Confidences -->
+            <div class="plate-stats-grid">
+              <div class="stat-card">
+                <div class="stat-label"><i class="fa-solid fa-bullseye"></i> Yolo Conf</div>
+                <div class="stat-value text-emerald" id="yoloConfVal">0.0%</div>
+                <div class="stat-bar"><div class="stat-bar-fill" id="yoloConfBar" style="width: 0%"></div></div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label"><i class="fa-solid fa-spell-check"></i> OCR Conf</div>
+                <div class="stat-value text-cyan" id="ocrConfVal">0.0%</div>
+                <div class="stat-bar"><div class="stat-bar-fill cyan-fill" id="ocrConfBar" style="width: 0%"></div></div>
+              </div>
+            </div>
+
+            <!-- Cropped Plate Previews -->
+            <div class="crops-preview-section">
+              <div class="crops-title">
+              <span><i class="fa-solid fa-crop"></i> Potongan Plat</span>
+                <button id="btnZoomCrop" class="text-btn" title="Perbesar"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+              </div>
+              <div class="crops-list" id="cropsList">
+                <div class="no-crops-placeholder">
+                  <i class="fa-solid fa-images"></i>
+                <span>Potongan plat akan muncul di sini</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- OCR Preprocessing & Debug Inspection Section -->
+            <div class="ocr-debug-section" id="ocrDebugSection">
+              <div class="crops-title debug-title-bar" id="debugTitleBar">
+                <span><i class="fa-solid fa-wand-magic-sparkles text-cyan"></i> Tahapan Preprocessing OCR</span>
+                <button id="btnToggleOcrDebug" class="text-btn" type="button" title="Buka/Tutup Detail"><i class="fa-solid fa-chevron-down" id="debugChevron"></i></button>
+              </div>
+              
+              <div id="debugVariantsWrapper" class="debug-variants-wrapper">
+                <!-- Plate selector if multiple plates detected -->
+                <div id="debugPlateTabs" class="debug-plate-tabs d-none"></div>
+
+                <!-- Variant Cards Grid -->
+                <div class="debug-variants-scroll" id="debugVariantsScroll">
+                  <div class="no-crops-placeholder">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>Tahapan preprocessing (Grayscale, CLAHE, Otsu, Adaptive, dll) akan tampil di sini</span>
+                  </div>
+                </div>
+
+                <!-- Raw Candidates Consensus Breakdown -->
+                <div class="debug-candidates-container" id="debugCandidatesContainer">
+                  <div class="candidates-header">
+                    <span><i class="fa-solid fa-check-double text-emerald"></i> Voting Konsensus OCR</span>
+                    <span id="candidateCountBadge" class="badge-mini">0 kandidat</span>
+                  </div>
+                  <div class="candidates-table-wrap">
+                    <table class="candidates-table" id="candidatesTable">
+                      <thead>
+                        <tr>
+                          <th>Teks Plat</th>
+                          <th>Conf</th>
+                          <th>Skor</th>
+                          <th>Varian</th>
+                        </tr>
+                      </thead>
+                      <tbody id="candidatesTableBody">
+                        <tr class="empty-candidate-row">
+                          <td colspan="4" class="text-center text-dim">Belum ada kandidat</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Model Parameters Info -->
+            <div class="model-params-box">
+              <div class="param-row">
+                <span>Model Weights:</span>
+                <span class="font-mono text-cyan">models/Grimorsbest.pt</span>
+              </div>
+              <div class="param-row">
+                <span>Threshold:</span>
+                <span class="font-mono text-emerald">0.25 (Conf)</span>
+              </div>
+              <div class="param-row">
+                <span>Input Size:</span>
+                <span class="font-mono">640 x 640</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Real-time Metrics / Stats -->
+        <div class="glass-panel stats-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <i class="fa-solid fa-chart-line text-emerald"></i>
+              <span>Ringkasan</span>
+            </div>
+          </div>
+          <div class="metrics-grid">
+            <div class="metric-box">
+              <span class="metric-num" id="statTotalScanned">0</span>
+              <span class="metric-desc">Total Pemindaian</span>
+            </div>
+            <div class="metric-box">
+              <span class="metric-num text-cyan" id="statPlatesFound">0</span>
+              <span class="metric-desc">Plat Terdeteksi</span>
+            </div>
+            <div class="metric-box">
+              <span class="metric-num text-emerald" id="statSuccessRate">100%</span>
+              <span class="metric-desc">Akurasi Rata-rata</span>
+            </div>
+          </div>
+        </div>
+
+      </aside>
+    </main>
+
+    <!-- BOTTOM: Activity / CCTV Detection History Log -->
+    <section class="history-section glass-panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <i class="fa-solid fa-clock-rotate-left text-cyan"></i>
+              <span>Riwayat Deteksi</span>
+        </div>
+        <div class="panel-actions">
+          <input type="text" id="logSearchInput" placeholder="Cari plat..." class="search-input" />
+          <button id="btnExportCsv" class="btn btn-secondary btn-sm">
+            <i class="fa-solid fa-file-csv"></i> Ekspor CSV
+          </button>
+          <button id="btnClearLog" class="btn btn-danger btn-sm">
+            <i class="fa-solid fa-trash-can"></i> Bersihkan
+          </button>
+        </div>
+      </div>
+
+      <!-- History Table -->
+      <div class="table-wrapper">
+        <table class="history-table" id="historyTable">
+          <thead>
+            <tr>
+              <th>Waktu</th>
+              <th>MODE</th>
+              <th>Crop</th>
+              <th>Nomor Plat</th>
+              <th>YOLO</th>
+              <th>OCR</th>
+              <th>Status</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="historyTableBody">
+            <tr class="empty-row">
+              <td colspan="8" class="text-center">Belum ada riwayat deteksi. Jalankan Foto atau CCTV untuk merekam plat kendaraan.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Modal Preview -->
+  <div id="imageModal" class="modal-overlay d-none">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="modalTitle">Detail Hasil Deteksi</h3>
+        <button id="btnModalClose" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <img id="modalImg" src="" alt="Modal Zoom" />
+        <div class="modal-caption" id="modalCaption"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Application Logic -->
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

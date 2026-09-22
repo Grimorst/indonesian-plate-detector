@@ -1,0 +1,42 @@
+# Python virtual environment
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Environment / secrets
+.env
+.env.*
+
+# YOLO / Ultralytics
+runs/
+.ultralytics/
+*.cache
+
+# Temporary files
+*.tmp
+*.temp
+
+# IDE
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
+# Local AI / IDE
+.agents/
+.claude/
+skills-lock.json
+
+# Training datasets
+datasets/
+
+# Training / testing scripts
+evaluate_images.py
+generate_labels.py
+test_ocr.py
+train_grimors.py
+train_plate_detector.py
